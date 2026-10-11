@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>과학실 자리 배치</title>
+<style>
+  :root {
+    --bg: #f4f7fb;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --primary: #2563eb;
+    --front: #dbeafe;
+    --back: #dcfce7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    padding: 20px 12px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { text-align: center; margin: 0 0 4px; font-size: 1.7rem; }
+  .sub { text-align: center; color: var(--muted); margin: 0 0 20px; font-size: 0.95rem; }
+  .panel {
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.07);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: center;
+  }
+  .controls label { font-size: 0.95rem; }
+  .controls input[type="number"] {
+    width: 80px; padding: 8px; border: 1px solid #d1d5db; border-radius: 8px;
+    font-size: 1.05rem; text-align: center; margin: 0 4px;
+  }
+  .mode { display: flex; gap: 12px; font-size: 0.95rem; }
+  button {
+    background: var(--primary); color: #fff; border: none; border-radius: 10px;
+    padding: 11px 22px; font-size: 1rem; font-weight: 700; cursor: pointer;
+  }
+  button:hover { filter: brightness(0.92); }
+  button.sub-btn { background: #6b7280; }
+  .msg { text-align: center; min-height: 1.3em; margin-top: 10px; font-size: 0.92rem; color: #dc2626; }
+  .info { text-align: center; margin-top: 10px; font-size: 0.92rem; color: var(--muted); }
+
+  .board {
+    background: #374151; color: #fff; text-align: center;
+    padding: 10px; border-radius: 8px; font-weight: 700; letter-spacing: 6px;
+    margin-bottom: 16px;
+  }
+  .row-label { font-size: 0.85rem; color: var(--muted); margin: 6px 0; }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+  .group {
+    border-radius: 12px; padding: 12px 8px; text-align: center; min-height: 130px;
+  }
+  .group.front { background: var(--front); }
+  .group.back  { background: var(--back); }
+  .group h3 { margin: 0 0 4px; font-size: 1rem; }
+  .group .cnt { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; }
+  .seats { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .seat {
+    min-width: 40px; padding: 8px 6px; background: #fff; border-radius: 8px;
+    font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .group.empty { opacity: 0.45; }
+  .rule { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+  @media (max-width: 520px) {
+    .row { gap: 6px; }
+    .seat { min-width: 34px; padding: 6px 4px; font-size: 0.9rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔬 과학실 자리 배치</h1>
+  <p class="sub">학생 수를 입력하면 6개 조에 자동으로 배치합니다.</p>
+
+  <div class="panel">
+    <div class="controls">
+      <label>학생 수 <input type="number" id="num" min="1" max="30" value="24">명</label>
+      <div class="mode">
+        <label><input type="radio" name="mode" value="random" checked> 무작위</label>
+        <label><input type="radio" name="mode" value="order"> 번호순</label>
+      </div>
+      <button id="run">배치하기</button>
+      <button id="reshuffle" class="sub-btn">다시 섞기</button>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="info" id="info"></div>
+  </div>
+
+  <div class="panel">
+    <div class="board">칠 판 / 교 탁</div>
+    <div class="row-label">▼ 앞줄 (1~3조)</div>
+    <div class="row" id="frontRow"></div>
+    <div class="row-label">▼ 뒷줄 (4~6조)</div>
+    <div class="row" id="backRow"></div>
+  </div>
+
+  <div class="panel rule">
+    <b>배치 규칙</b><br>
+    • 기본은 1조당 4명, 최대 5명 (6개 조, 최대 30명)<br>
+    • 24명 이하: 뒷줄(4·5·6조)부터 4명씩 채운 뒤 앞줄(1·2·3조)을 채웁니다.<br>
+    • 25명 이상: 모든 조에 4명을 배치하고, 남는 학생을 앞줄(1·2·3조)부터 한 명씩 더해 5명으로 만듭니다. 앞줄이 모두 5명이 되면 뒷줄(4·5·6조)에 더합니다.
+  </div>
+</div>
+
+<script>
+  const MAX_TOTAL = 30;
+  const numInput = document.getElementById('num');
+  const msgEl = document.getElementById('msg');
+  const infoEl = document.getElementById('info');
+  const frontRow = document.getElementById('frontRow');
+  const backRow = document.getElementById('backRow');
+
+  // 조별 인원수 계산 (인덱스 0~5 = 1~6조, 앞줄 1~3조 / 뒷줄 4~6조)
+  function calcCounts(n) {
+    const counts = [0, 0, 0, 0, 0, 0];
+    if (n <= 24) {
+      let left = n;
+      for (const g of [3, 4, 5, 0, 1, 2]) {   // 4,5,6조 → 1,2,3조
+        const c = Math.min(4, left);
+        counts[g] = c;
+        left -= c;
+      }
+    } else {
+      counts.fill(4);
+      let extra = n - 24;
+      for (const g of [0, 1, 2, 3, 4, 5]) {   // 1,2,3조 → 4,5,6조
+        if (extra <= 0) break;
+        counts[g] += 1;
+        extra -= 1;
+      }
+    }
+    return counts;
+  }
+
+  // 암호학적 난수로 편향 없는 정수 생성
+  function randomInt(max) {
+    const limit = Math.floor(0x100000000 / max) * max;
+    const buf = new Uint32Array(1);
+    do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+    return buf[0] % max;
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = randomInt(i + 1);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function render() {
+    const n = parseInt(numInput.value, 10);
+    msgEl.textContent = '';
+    if (!Number.isInteger(n) || n < 1 || n > MAX_TOTAL) {
+      msgEl.textContent = '학생 수는 1~' + MAX_TOTAL + '명 사이의 정수로 입력해 주세요.';
+      return;
+    }
+
+    const counts = calcCounts(n);
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    let students = Array.from({ length: n }, (_, i) => i + 1);
+    if (mode === 'random') shuffle(students);
+
+    // 1조부터 순서대로 학생 배정
+    const groups = [];
+    let idx = 0;
+    for (let g = 0; g < 6; g++) {
+      const members = students.slice(idx, idx + counts[g]).sort((a, b) => a - b);
+      idx += counts[g];
+      groups.push(members);
+    }
+
+    frontRow.innerHTML = '';
+    backRow.innerHTML = '';
+    groups.forEach((members, g) => {
+      const div = document.createElement('div');
+      div.className = 'group ' + (g < 3 ? 'front' : 'back') + (members.length === 0 ? ' empty' : '');
+      const seats = members.map(m => '<div class="seat">' + m + '</div>').join('');
+      div.innerHTML = '<h3>' + (g + 1) + '조</h3><div class="cnt">' + members.length + '명</div>' +
+                      '<div class="seats">' + seats + '</div>';
+      (g < 3 ? frontRow : backRow).appendChild(div);
+    });
+
+    infoEl.textContent = '총 ' + n + '명 · 조별 인원: ' + counts.map((c, i) => (i + 1) + '조 ' + c).join(' / ');
+  }
+
+  document.getElementById('run').addEventListener('click', render);
+  document.getElementById('reshuffle').addEventListener('click', render);
+  numInput.addEventListener('keydown', e => { if (e.key === 'Enter') render(); });
+  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', render));
+
+  render();
+</script>
+</body>
+</html>
